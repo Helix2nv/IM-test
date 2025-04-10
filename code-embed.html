@@ -1,0 +1,90 @@
+<script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+<style>
+  #map { width: 100%; height: 600px; }
+</style>
+<div id="map"></div>
+<script>
+  mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN'; // 🔴 Replace with your Mapbox token
+
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/light-v10',
+    center: [134, -25],
+    zoom: 3.5
+  });
+
+  const geojsonUrl = 'https://your-hosted-file-url/australian-states.geojson'; // 🔴 Replace with hosted GeoJSON URL
+
+  async function loadMap() {
+    const response = await fetch(geojsonUrl);
+    const data = await response.json();
+
+    // 🧠 Inject CMS data into GeoJSON
+    const cmsEntries = Array.from(document.querySelectorAll('.cms-entry')).map(el => ({
+      state: el.dataset.state,
+      party: el.dataset.party,
+      description: el.dataset.description
+    }));
+
+    for (const feature of data.features) {
+      const match = cmsEntries.find(e => e.state === feature.properties.state);
+      if (match) {
+        feature.properties.party = match.party;
+        feature.properties.description = match.description;
+      }
+    }
+
+    map.on('load', () => {
+      map.addSource('states', {
+        type: 'geojson',
+        data: data
+      });
+
+      // 🖍️ Layer fill based on political party
+      map.addLayer({
+        id: 'states-fill',
+        type: 'fill',
+        source: 'states',
+        paint: {
+          'fill-color': [
+            'match',
+            ['get', 'party'],
+            'Labor', '#FF0000',
+            'Liberal', '#0000FF',
+            '#CCCCCC' // default
+          ],
+          'fill-opacity': 0.6
+        }
+      });
+
+      map.addLayer({
+        id: 'states-outline',
+        type: 'line',
+        source: 'states',
+        paint: {
+          'line-color': '#555',
+          'line-width': 1
+        }
+      });
+
+      // 🧷 Popup on click
+      map.on('click', 'states-fill', (e) => {
+        const props = e.features[0].properties;
+        new mapboxgl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`<strong>${props.state}</strong><br>${props.description}`)
+          .addTo(map);
+      });
+
+      map.on('mouseenter', 'states-fill', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'states-fill', () => {
+        map.getCanvas().style.cursor = '';
+      });
+    });
+  }
+
+  loadMap();
+</script>
