@@ -1,90 +1,101 @@
 <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
 <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
 <style>
-  #map { width: 100%; height: 600px; }
+  #map { width: currentWidth; height: currentHeight; }
 </style>
 <div id="map"></div>
 <script>
-  mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN'; // 🔴 Replace with your Mapbox token
+  mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
 
   const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/light-v10',
-    center: [134, -25],
-    zoom: 3.5
+    style: 'mapbox://styles/mapbox/light-v11',
+    center: [144.9631, -37.8136], // Melbourne
+    zoom: 6
   });
 
-  const geojsonUrl = 'https://your-hosted-file-url/australian-states.geojson'; // 🔴 Replace with hosted GeoJSON URL
+  map.on('load', () => {
+    fetch('your-geojson-file.geojson')
+      .then((res) => res.json())
+      .then((data) => {
+        map.addSource('districts', {
+          type: 'geojson',
+          data: data
+        });
 
-  async function loadMap() {
-    const response = await fetch(geojsonUrl);
-    const data = await response.json();
+        // Add base layer with placeholder color
+        map.addLayer({
+          id: 'districts-fill',
+          type: 'fill',
+          source: 'districts',
+          layout: {},
+          paint: {
+            'fill-color': [
+              'match',
+              ['get', 'district'],
+              '', '#cccccc',
+              '#cccccc'
+            ],
+            'fill-opacity': 0.8
+          }
+        });
 
-    // 🧠 Inject CMS data into GeoJSON
-    const cmsEntries = Array.from(document.querySelectorAll('.cms-entry')).map(el => ({
-      state: el.dataset.state,
-      party: el.dataset.party,
-      description: el.dataset.description
-    }));
+        // Add outlines
+        map.addLayer({
+          id: 'districts-outline',
+          type: 'line',
+          source: 'districts',
+          layout: {},
+          paint: {
+            'line-color': '#333',
+            'line-width': 1
+          }
+        });
 
-    for (const feature of data.features) {
-      const match = cmsEntries.find(e => e.state === feature.properties.state);
-      if (match) {
-        feature.properties.party = match.party;
-        feature.properties.description = match.description;
-      }
-    }
+        // Hover effect
+        let hoveredDistrict = null;
+        map.on('mousemove', 'districts-fill', (e) => {
+          const feature = e.features[0];
+          if (feature) {
+            hoveredDistrict = feature.properties.district;
+            map.setPaintProperty('districts-fill', 'fill-opacity', [
+              'match',
+              ['get', 'district'],
+              hoveredDistrict, 1,
+              0.5
+            ]);
+          }
+        });
 
-    map.on('load', () => {
-      map.addSource('states', {
-        type: 'geojson',
-        data: data
+        map.on('mouseleave', 'districts-fill', () => {
+          hoveredDistrict = null;
+          map.setPaintProperty('districts-fill', 'fill-opacity', 0.8);
+        });
+
+        // Link CMS to map: fly to feature
+        document.querySelectorAll('[data-district]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const districtName = el.getAttribute('data-district');
+            const feature = data.features.find(
+              (f) => f.properties.district === districtName
+            );
+            if (feature) {
+              const center = turf.center(feature).geometry.coordinates;
+              map.flyTo({ center, zoom: 10 });
+            }
+          });
+        });
+
+        // Match color to CMS entries
+        const fillExpression = ['match', ['get', 'district']];
+        document.querySelectorAll('[data-district][data-party-color]').forEach((el) => {
+          const district = el.getAttribute('data-district');
+          const color = el.getAttribute('data-party-color');
+          fillExpression.push(district, color);
+        });
+        fillExpression.push('#cccccc'); // fallback color
+
+        map.setPaintProperty('districts-fill', 'fill-color', fillExpression);
       });
-
-      // 🖍️ Layer fill based on political party
-      map.addLayer({
-        id: 'states-fill',
-        type: 'fill',
-        source: 'states',
-        paint: {
-          'fill-color': [
-            'match',
-            ['get', 'party'],
-            'Labor', '#FF0000',
-            'Liberal', '#0000FF',
-            '#CCCCCC' // default
-          ],
-          'fill-opacity': 0.6
-        }
-      });
-
-      map.addLayer({
-        id: 'states-outline',
-        type: 'line',
-        source: 'states',
-        paint: {
-          'line-color': '#555',
-          'line-width': 1
-        }
-      });
-
-      // 🧷 Popup on click
-      map.on('click', 'states-fill', (e) => {
-        const props = e.features[0].properties;
-        new mapboxgl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`<strong>${props.state}</strong><br>${props.description}`)
-          .addTo(map);
-      });
-
-      map.on('mouseenter', 'states-fill', () => {
-        map.getCanvas().style.cursor = 'pointer';
-      });
-      map.on('mouseleave', 'states-fill', () => {
-        map.getCanvas().style.cursor = '';
-      });
-    });
-  }
-
-  loadMap();
+  });
 </script>
