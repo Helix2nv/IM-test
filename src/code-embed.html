@@ -1,21 +1,15 @@
-<script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
-<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
-<style>
-  #map { width: currentWidth; height: currentHeight; }
-</style>
-<div id="map"></div>
 <script>
-  mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
+  mapboxgl.accessToken = 'pk.eyJ1IjoiaGVsaXgybnYiLCJhIjoiY2xzOHloMmJ2MDFiejJrb2N6M2o1Y3lhayJ9.EqrsWm-oPXOkFi00Is9Kkw';
 
   const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/light-v11',
-    center: [144.9631, -37.8136], // Melbourne
+    style: 'mapbox://styles/helix2nv/cls8yl7e500fc01r680lq80kl',
+    center: [144.9631, -37.8136], // Melbourne coordinates
     zoom: 6
   });
 
   map.on('load', () => {
-    fetch('your-geojson-file.geojson')
+    fetch('https://raw.githubusercontent.com/Helix2nv/IM-test/main/src/vic-electoral-districts.geojson')
       .then((res) => res.json())
       .then((data) => {
         map.addSource('districts', {
@@ -23,7 +17,7 @@
           data: data
         });
 
-        // Add base layer with placeholder color
+        // Add base layer
         map.addLayer({
           id: 'districts-fill',
           type: 'fill',
@@ -32,15 +26,16 @@
           paint: {
             'fill-color': [
               'match',
-              ['get', 'district'],
-              '', '#cccccc',
-              '#cccccc'
+              ['get', 'district'], // Updated to match the 'district' property in GeoJSON
+              // Placeholder for the color matching logic
+              '', '#cccccc',  // Default fallback color
+              '#cccccc' // Fallback color for unmatched values
             ],
             'fill-opacity': 0.8
           }
         });
 
-        // Add outlines
+        // Add outline layer
         map.addLayer({
           id: 'districts-outline',
           type: 'line',
@@ -53,26 +48,28 @@
         });
 
         // Hover effect
-        let hoveredDistrict = null;
+        let hoveredDistrictId = null;
+
         map.on('mousemove', 'districts-fill', (e) => {
-          const feature = e.features[0];
-          if (feature) {
-            hoveredDistrict = feature.properties.district;
+          map.getCanvas().style.cursor = 'pointer';
+          const hoveredFeature = e.features[0];
+          if (hoveredFeature) {
+            hoveredDistrictId = hoveredFeature.properties.district;
             map.setPaintProperty('districts-fill', 'fill-opacity', [
               'match',
               ['get', 'district'],
-              hoveredDistrict, 1,
+              hoveredDistrictId, 1,
               0.5
             ]);
           }
         });
 
         map.on('mouseleave', 'districts-fill', () => {
-          hoveredDistrict = null;
+          map.getCanvas().style.cursor = '';
           map.setPaintProperty('districts-fill', 'fill-opacity', 0.8);
         });
 
-        // Link CMS to map: fly to feature
+        // Fly to district on CMS click
         document.querySelectorAll('[data-district]').forEach((el) => {
           el.addEventListener('click', () => {
             const districtName = el.getAttribute('data-district');
@@ -86,16 +83,33 @@
           });
         });
 
-        // Match color to CMS entries
-        const fillExpression = ['match', ['get', 'district']];
-        document.querySelectorAll('[data-district][data-party-color]').forEach((el) => {
-          const district = el.getAttribute('data-district');
-          const color = el.getAttribute('data-party-color');
-          fillExpression.push(district, color);
-        });
-        fillExpression.push('#cccccc'); // fallback color
+        // Build fill color match expression from CMS data
+        const fillExpression = ['match', ['get', 'district']]; // Use 'district' for matching
 
+        document.querySelectorAll('[data-district]').forEach((el) => {
+          const district = el.getAttribute('data-district');
+          const tag = el.querySelector('.winners-tag');
+          if (tag) {
+            const color = getComputedStyle(tag).backgroundColor;
+
+            // Optional: convert RGB to HEX if needed
+            const rgbMatch = color.match(/\d+/g);
+            const hex = rgbMatch
+              ? `#${rgbMatch.slice(0, 3).map(x => parseInt(x).toString(16).padStart(2, '0')).join('')}`
+              : '#cccccc'; // Default fallback color
+
+            fillExpression.push(district, hex);
+          }
+        });
+
+        fillExpression.push('#cccccc'); // fallback color for unmatched districts
         map.setPaintProperty('districts-fill', 'fill-color', fillExpression);
       });
   });
 </script>
+
+<!-- 🔗 Each CMS item should have the following structure -->
+<div class="cms-item" data-district="Richmond">
+  <!-- Style and content of the CMS entry -->
+  <div class="winners-tag" style="background-color: #e91e63;"></div>  <!-- Background color pulled from CMS -->
+</div>
